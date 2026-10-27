@@ -1,49 +1,28 @@
--- SpendWise expenses table schema and RLS policies
+-- Tạo bảng expenses
+drop table if exists expenses cascade;
 
-DROP TABLE IF EXISTS expenses CASCADE;
-
-CREATE TABLE expenses (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  amount NUMERIC NOT NULL CHECK (amount > 0),
-  category TEXT NOT NULL CHECK (category IN ('Food', 'Transport', 'Shopping', 'Bills', 'Other')),
-  spent_on DATE NOT NULL,
-  note TEXT DEFAULT '' CHECK (char_length(note) <= 100),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+create table expenses (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null default auth.uid(),
+  amount numeric not null check (amount > 0),
+  category text not null check (category in ('Food', 'Transport', 'Shopping', 'Bills', 'Other')),
+  spent_on date not null,
+  note text check (char_length(note) <= 100),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Indexes for optimal querying
-CREATE INDEX IF NOT EXISTS idx_expenses_user_id ON expenses(user_id);
-CREATE INDEX IF NOT EXISTS idx_expenses_spent_on ON expenses(spent_on DESC);
+-- Bật Row Level Security (RLS)
+alter table expenses enable row level security;
 
--- Enable Row Level Security (RLS)
-ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+-- Viết Policy: Chỉ người đăng nhập mới được thao tác trên dòng của chính mình
+create policy "User can view their own expenses" 
+on expenses for select 
+using (auth.uid() = user_id);
 
--- Policy 1: Authenticated users can view only their own expenses
-CREATE POLICY "Users can select own expenses"
-ON expenses
-FOR SELECT
-TO authenticated
-USING (auth.uid() = user_id);
+create policy "User can insert their own expenses" 
+on expenses for insert 
+with check (auth.uid() = user_id);
 
--- Policy 2: Authenticated users can insert rows only for themselves
-CREATE POLICY "Users can insert own expenses"
-ON expenses
-FOR INSERT
-TO authenticated
-WITH CHECK (auth.uid() = user_id);
-
--- Policy 3: Authenticated users can delete only their own expenses
-CREATE POLICY "Users can delete own expenses"
-ON expenses
-FOR DELETE
-TO authenticated
-USING (auth.uid() = user_id);
-
--- Policy 4: Authenticated users can update only their own expenses
-CREATE POLICY "Users can update own expenses"
-ON expenses
-FOR UPDATE
-TO authenticated
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
+create policy "User can delete their own expenses" 
+on expenses for delete 
+using (auth.uid() = user_id);
